@@ -27,12 +27,24 @@ app.post("/participants", async (req, res) => {
   if (validation.error) {
     return res.sendStatus(422)
   }
+
   const participants = database.collection("participants")
   const alreadyExists = await participants.find(participant).toArray()
   if (alreadyExists.length > 0) {
     return res.sendStatus(409)
   }
   await participants.insertOne({ ...participant, lastStatus: Date.now() })
+
+  const message = {
+    from: participant.name,
+    to: "Todos",
+    text: "entra na sala...",
+    type: "status",
+    time: dayjs().format("HH:mm:ss"),
+  }
+  const messages = database.collection("messages")
+  await messages.insertOne(message)
+
   res.sendStatus(201)
 })
 
