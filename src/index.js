@@ -1,7 +1,6 @@
 import express, { json } from "express"
 import { MongoClient, ObjectId } from "mongodb"
 import cors from "cors"
-import Joi from "joi"
 import dayjs from "dayjs"
 import dotenv from "dotenv"
 
@@ -21,18 +20,27 @@ mongoClient
   })
   .catch((err) => console.log(err))
 
+app.get("/participants", async (req, res) => {
+  const participants = database.collection("participants")
+  const allParticipants = await participants.find().toArray()
+  res.send(allParticipants)
+})
+
 app.post("/participants", async (req, res) => {
   const participant = req.body
+  const participants = database.collection("participants")
+  const messages = database.collection("messages")
+
   const validation = validateParticipant(participant)
   if (validation.error) {
     return res.sendStatus(422)
   }
 
-  const participants = database.collection("participants")
   const alreadyExists = await participants.find(participant).toArray()
   if (alreadyExists.length > 0) {
     return res.sendStatus(409)
   }
+
   await participants.insertOne({ ...participant, lastStatus: Date.now() })
 
   const message = {
@@ -42,7 +50,6 @@ app.post("/participants", async (req, res) => {
     type: "status",
     time: dayjs().format("HH:mm:ss"),
   }
-  const messages = database.collection("messages")
   await messages.insertOne(message)
 
   res.sendStatus(201)
