@@ -1,9 +1,11 @@
 import express, { json } from "express"
-import { MongoClient, ObjectId } from "mongodb"
+import { ObjectId } from "mongodb"
 import cors from "cors"
 import dayjs from "dayjs"
 import dotenv from "dotenv"
 
+import connectToMongoDB from "./utils/mongoConnection.js"
+import removeInactiveUsers from "./utils/removeInactiveUsers.js"
 import {
   validateParticipant,
   validateMessage,
@@ -13,19 +15,18 @@ dotenv.config()
 
 const app = express().use(cors()).use(json())
 
-let username = null
-let database = null
-const mongoClient = new MongoClient(process.env.MONGO_URI)
-mongoClient
-  .connect()
-  .then(() => {
-    database = mongoClient.db(process.env.DB_NAME)
-    console.log("Successfully connected to mongodb.")
+let [activeUser, participants, messages] = [null, null, null]
+
+const promise = connectToMongoDB()
+promise
+  .then((collections) => {
+    participants = collections.participants
+    messages = collections.messages
+    removeInactiveUsers(participants, messages)
   })
   .catch((err) => console.log(err))
 
 app.get("/participants", async (req, res) => {
-  const participants = database.collection("participants")
   try {
     const allParticipants = await participants.find().toArray()
     res.send(allParticipants)
@@ -36,25 +37,23 @@ app.get("/participants", async (req, res) => {
 })
 
 app.post("/participants", async (req, res) => {
+  activeUser = req.body.name
   const participant = req.body
-  const participants = database.collection("participants")
-  const messages = database.collection("messages")
-
   const validation = validateParticipant(participant)
+
   if (validation.error) {
     const errors = validation.error.details.map((detail) => detail.message)
     console.log(errors)
     return res.sendStatus(422)
   }
-  username = req.body
 
   try {
     const alreadyExists = await participants.find(participant).toArray()
-    if (alreadyExists.length > 0) {
+    if (alreadyExists.length !== 0) {
       return res.status(409).send("this user already exists")
     }
-
     await participants.insertOne({ ...participant, lastStatus: Date.now() })
+
     const message = {
       from: participant.name,
       to: "Todos",
@@ -63,6 +62,7 @@ app.post("/participants", async (req, res) => {
       time: dayjs().format("HH:mm:ss"),
     }
     await messages.insertOne(message)
+
     res.sendStatus(201)
   } catch (err) {
     console.log(err)
@@ -70,26 +70,21 @@ app.post("/participants", async (req, res) => {
   }
 })
 
-app.put("/participants/status", async (req, res) => {
-  const { user } = req.headers
-  const participants = database.collection("participants")
-
+app.get("/messages", async (req, res) => {
+  const limit = parseInt(req.query.limit) || null
   try {
-    const userInfos = await participants.find({ name: user }).toArray()
-    if (userInfos.length === 0) return res.sendStatus(404)
-
-    const id = userInfos[0]._id
-
-    setInterval(async () => {
-      await participants.updateOne(
-        {
-          _id: new ObjectId(id),
-        },
-        { $set: { ...userInfos[0], lastStatus: Date.now() } }
+    const allMessages = await messages.find().toArray()
+    const allowedMessages = allMessages.filter((message) => {
+      return (
+        message.to === "Todos" ||
+        message.to === activeUser ||
+        message.from === activeUser
       )
-    }, 5000)
-
-    res.sendStatus(200)
+    })
+    if (limit) {
+      return res.send(allowedMessages.slice(`-${limit}`))
+    }
+    res.send(allowedMessages)
   } catch (err) {
     console.log(err)
     res.sendStatus(500)
@@ -99,12 +94,11 @@ app.put("/participants/status", async (req, res) => {
 app.post("/messages", async (req, res) => {
   const message = req.body
   const { user } = req.headers
-  const participants = database.collection("participants")
-  const messages = database.collection("messages")
 
   try {
     const messageValidation = validateMessage(message)
     const userValidation = await participants.find({ name: user }).toArray()
+
     if (messageValidation.error) {
       const errors = messageValidation.error.details.map(
         (detail) => detail.message
@@ -113,7 +107,7 @@ app.post("/messages", async (req, res) => {
       return res.sendStatus(422)
     }
     if (userValidation.length === 0) {
-      return res.status(422).send("this user is not in the chat room")
+      return res.status(422).send("Invalid User.")
     }
 
     await messages.insertOne({
@@ -128,18 +122,23 @@ app.post("/messages", async (req, res) => {
   }
 })
 
-app.get("/messages", async (req, res) => {
-  const limit = parseInt(req.query.limit) || null
-  const messages = database.collection("messages")
+app.post("/status", async (req, res) => {
+  const { user } = req.headers
   try {
-    const allMessages = await messages.find().toArray()
-    const allowedMessages = allMessages.filter((message) => {
-      return message.to === "Todos" || message.to === username
-    })
-    if (limit) {
-      return res.send(allowedMessages.slice(`-${limit}`))
-    }
-    res.send(allowedMessages)
+    const userInfos = await participants.find({ name: user }).toArray()
+    if (userInfos.length === 0) return res.sendStatus(404)
+    const id = userInfos[0]._id
+
+    setInterval(async () => {
+      await participants.updateOne(
+        {
+          _id: new ObjectId(id),
+        },
+        { $set: { ...userInfos[0], lastStatus: Date.now() } }
+      )
+    }, 5000)
+
+    res.sendStatus(200)
   } catch (err) {
     console.log(err)
     res.sendStatus(500)
