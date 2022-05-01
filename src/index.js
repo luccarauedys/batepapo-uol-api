@@ -70,6 +70,32 @@ app.post("/participants", async (req, res) => {
   }
 })
 
+app.put("/participants/status", async (req, res) => {
+  const { user } = req.headers
+  const participants = database.collection("participants")
+
+  try {
+    const userInfos = await participants.find({ name: user }).toArray()
+    if (userInfos.length === 0) return res.sendStatus(404)
+
+    const id = userInfos[0]._id
+
+    setInterval(async () => {
+      await participants.updateOne(
+        {
+          _id: new ObjectId(id),
+        },
+        { $set: { ...userInfos[0], lastStatus: Date.now() } }
+      )
+    }, 5000)
+
+    res.sendStatus(200)
+  } catch (err) {
+    console.log(err)
+    res.sendStatus(500)
+  }
+})
+
 app.post("/messages", async (req, res) => {
   const message = req.body
   const { user } = req.headers
