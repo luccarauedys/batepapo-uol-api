@@ -122,6 +122,25 @@ app.post("/messages", async (req, res) => {
   }
 })
 
+app.delete("/messages/:idMessage", async (req, res) => {
+  const { idMessage } = req.params
+  const { user } = req.headers
+
+  try {
+    const message = await messages
+      .find({ _id: new ObjectId(idMessage) })
+      .toArray()
+    if (message.length === 0) return res.sendStatus(404)
+    if (message[0].from !== user) return res.sendStatus(401)
+
+    await messages.deleteOne({ _id: new ObjectId(idMessage) })
+    res.sendStatus(200)
+  } catch (err) {
+    console.log(err)
+    res.sendStatus(500)
+  }
+})
+
 app.post("/status", async (req, res) => {
   const { user } = req.headers
   try {
