@@ -1,36 +1,27 @@
 import dayjs from "dayjs"
 
 export default function removeInactiveUsers(participants, messages) {
-  if (!participants || !messages) return
-  try {
-    setInterval(async () => {
-      const limit = Date.now() - 10000
-
+  setInterval(async () => {
+    const tenSecsAgo = Date.now() - 10000
+    try {
       const inactiveUsers = await participants
         .find({
-          lastStatus: { $lt: limit },
+          lastStatus: { $lt: tenSecsAgo },
         })
         .toArray()
 
-      const deleted = await participants.deleteMany({
-        lastStatus: { $lt: limit },
-      })
-
       inactiveUsers.forEach(async (inactiveUser) => {
-        const message = {
+        await participants.deleteOne(inactiveUser)
+        await messages.insertOne({
           from: inactiveUser.name,
           to: "Todos",
           text: "saiu da sala...",
           type: "status",
           time: dayjs().format("HH:mm:ss"),
-        }
-
-        await messages.insertOne(message)
+        })
       })
-
-      console.log(deleted.deletedCount, "inactive users deleted.")
-    }, 15000)
-  } catch (err) {
-    console.log(err)
-  }
+    } catch (err) {
+      console.log(err)
+    }
+  }, 15000)
 }

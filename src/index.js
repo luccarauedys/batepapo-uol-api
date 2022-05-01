@@ -179,14 +179,12 @@ app.post("/status", async (req, res) => {
     if (userInfos.length === 0) return res.sendStatus(404)
     const id = userInfos[0]._id
 
-    setInterval(async () => {
-      await participants.updateOne(
-        {
-          _id: new ObjectId(id),
-        },
-        { $set: { ...userInfos[0], lastStatus: Date.now() } }
-      )
-    }, 5000)
+    await participants.updateOne(
+      {
+        _id: new ObjectId(id),
+      },
+      { $set: { ...userInfos[0], lastStatus: Date.now() } }
+    )
 
     res.sendStatus(200)
   } catch (err) {
