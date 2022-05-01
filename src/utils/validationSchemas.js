@@ -19,17 +19,3 @@ export function validateParticipant(participant) {
 export function validateMessage(message) {
   return messageSchema.validate(message, { abortEarly: false })
 }
-
-export function validateUser(user, listOfParticipants) {
-  // const validUserSchema = Joi.object({
-  //   name: Joi.string()
-  //     .required()
-  //     .allow(...listOfParticipants),
-  // })
-
-  const validUserSchema = Joi.string()
-    .required()
-    .allow(...listOfParticipants)
-
-  return validUserSchema.validate(user)
-}

@@ -8,7 +8,6 @@ import connectToMongoDB from "./utils/mongoConnection.js"
 import removeInactiveUsers from "./utils/removeInactiveUsers.js"
 import {
   validateParticipant,
-  validateUser,
   validateMessage,
 } from "./utils/validationSchemas.js"
 
@@ -17,7 +16,6 @@ dotenv.config()
 const app = express().use(cors()).use(json())
 
 let [activeUser, participants, messages] = [null, null, null]
-
 const promise = connectToMongoDB()
 promise
   .then((collections) => {
@@ -149,12 +147,12 @@ app.put("/messages/:idMessage", async (req, res) => {
 
   try {
     const msgValidation = validateMessage(newMessage)
+    if (msgValidation.error) return res.sendStatus(422)
+
     const allParticipants = await participants.find().toArray()
-    const listOfParticipants = allParticipants.map(
-      (participant) => participant.name
-    )
-    const userValidation = validateUser(user, listOfParticipants)
-    if (msgValidation.error || userValidation.error) return res.sendStatus(422)
+    const listOfNames = allParticipants.map((participant) => participant.name)
+    const userValidation = listOfNames.includes(user)
+    if (!userValidation) return res.sendStatus(422)
 
     const oldMessage = await messages
       .find({ _id: new ObjectId(idMessage) })
