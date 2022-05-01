@@ -8,6 +8,7 @@ import connectToMongoDB from "./utils/mongoConnection.js"
 import removeInactiveUsers from "./utils/removeInactiveUsers.js"
 import {
   validateParticipant,
+  validateUser,
   validateMessage,
 } from "./utils/validationSchemas.js"
 
@@ -134,6 +135,38 @@ app.delete("/messages/:idMessage", async (req, res) => {
     if (message[0].from !== user) return res.sendStatus(401)
 
     await messages.deleteOne({ _id: new ObjectId(idMessage) })
+    res.sendStatus(200)
+  } catch (err) {
+    console.log(err)
+    res.sendStatus(500)
+  }
+})
+
+app.put("/messages/:idMessage", async (req, res) => {
+  const { idMessage } = req.params
+  const { user } = req.headers
+  const newMessage = req.body
+
+  try {
+    const msgValidation = validateMessage(newMessage)
+    const allParticipants = await participants.find().toArray()
+    const listOfParticipants = allParticipants.map(
+      (participant) => participant.name
+    )
+    const userValidation = validateUser(user, listOfParticipants)
+    if (msgValidation.error || userValidation.error) return res.sendStatus(422)
+
+    const oldMessage = await messages
+      .find({ _id: new ObjectId(idMessage) })
+      .toArray()
+
+    if (oldMessage.length === 0) return res.sendStatus(404)
+    if (oldMessage[0].from !== user) return res.sendStatus(401)
+
+    await messages.updateOne(
+      { _id: new ObjectId(idMessage) },
+      { $set: { ...oldMessage[0], text: newMessage.text } }
+    )
     res.sendStatus(200)
   } catch (err) {
     console.log(err)
